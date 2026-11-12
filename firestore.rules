@@ -1,0 +1,30 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function verified() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    function isOwner(id) {
+      return verified() && request.auth.uid == id;
+    }
+    function invited(data) {
+      return verified() && data.inviteEmail == request.auth.token.email;
+    }
+    function valid(data) {
+      return data.keys().hasOnly(['inviteEmail', 'payload', 'revision'])
+        && data.inviteEmail is string && data.inviteEmail.size() <= 254
+        && data.payload is string && data.payload.size() <= 700000
+        && data.revision is int;
+    }
+    match /workspaces/{id} {
+      allow get: if isOwner(id) || invited(resource.data);
+      allow create: if isOwner(id) && valid(request.resource.data)
+        && request.resource.data.inviteEmail == ''
+        && request.resource.data.revision == 0;
+      allow update: if valid(request.resource.data)
+        && request.resource.data.revision == resource.data.revision + 1
+        && (isOwner(id) || (invited(resource.data)
+          && request.resource.data.inviteEmail == resource.data.inviteEmail));
+    }
+  }
+}
