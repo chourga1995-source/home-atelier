@@ -46,6 +46,17 @@ export function installCloud(bridge) {
     return [bridge.key, 'cloud-draft', context.uid, context.id].join('.');
   }
 
+  function workspacePreference(uid, id) {
+    const key = bridge.key + '.active-workspace.' + uid;
+    try {
+      if (id === undefined) return localStorage.getItem(key);
+      if (id) localStorage.setItem(key, id);
+      else localStorage.removeItem(key);
+    } catch {
+      return null;
+    }
+  }
+
   function setMessage(text) {
     message = text;
     status.textContent = text;
@@ -128,7 +139,7 @@ export function installCloud(bridge) {
     badge.textContent = 'Stored in this browser';
   }
 
-  function refresh(context, snapshot) {
+  function refresh(context, snapshot, force = false) {
     const entry = snapshot.data();
     if (!entry) throw problem('This workspace is unavailable.');
     if (entry.revision < context.revision) return;
@@ -152,7 +163,7 @@ export function installCloud(bridge) {
       }
     }
     if (entry.payload !== context.appliedPayload) {
-      if (!bridge.canApply()) {
+      if (!force && !bridge.canApply()) {
         context.deferred = snapshot;
         setMessage('Shared changes are waiting for your editor to close.');
         return;
@@ -205,11 +216,12 @@ export function installCloud(bridge) {
         setMessage(context.conflict
           ? 'A local draft differs from the shared version. Download it before loading the shared version.'
           : 'A local draft is ready to sync.');
-      } else refresh(context, snapshot);
+      } else refresh(context, snapshot, true);
     } catch (error) {
       closeWorkspace();
       throw error;
     }
+    workspacePreference(current.uid, id);
     disconnect = onSnapshot(ref, { includeMetadataChanges: true }, next => {
       if (active !== context || next.metadata.fromCache || next.metadata.hasPendingWrites) return;
       try {
@@ -221,6 +233,7 @@ export function installCloud(bridge) {
       }
     }, error => {
       if (active !== context) return;
+      if (error.code === 'permission-denied') workspacePreference(context.uid, null);
       if (error.code === 'permission-denied' || !context.pending) closeWorkspace();
       setMessage(describe(error));
       paint();
@@ -356,7 +369,9 @@ export function installCloud(bridge) {
     await signOut(auth);
   });
   controls['atelier-leave'].onclick = () => action(async () => {
+    if (!active) return;
     if (active?.pending && active.backedUp !== active.pending) throw problem('Sync or download your draft before leaving.');
+    workspacePreference(active.uid, null);
     closeWorkspace();
     setMessage('You are viewing your local planner.');
   });
@@ -375,10 +390,20 @@ export function installCloud(bridge) {
   onAuthStateChanged(auth, account => {
     if (active && active.uid !== account?.uid) closeWorkspace();
     user = account;
+    const previous = account?.emailVerified && workspacePreference(account.uid);
     if (!active) setMessage(account
       ? account.emailVerified ? 'Open your workspace or join one by code.' : 'Verify your email to enable shared workspaces.'
       : 'Sign in to sync or share this planner.');
     paint();
+    if (!active && previous) {
+      setMessage('Opening your shared workspace…');
+      void openWorkspace(previous).catch(error => {
+        if (user !== account || active) return;
+        if (error.code === 'permission-denied') workspacePreference(account.uid, null);
+        setMessage(describe(error));
+        paint();
+      });
+    }
   });
   function refreshDeferred() {
     const context = active;

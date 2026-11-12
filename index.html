@@ -882,7 +882,7 @@ function setMonth(m){
 function welcome(){
   modal('Set up your household','Choose how to start The Home Atelier.',
     '<div class="welcome"><button type="button" data-action="welcome-sample">'+icon('chart',23)+'<b>Explore sample data</b><small>See a fictional household with transactions, bills and debts.</small></button>'+
-    '<button type="button" data-action="welcome-blank">'+icon('home',23)+'<b>Start blank</b><small>Set up your accounts and your own budget.</small></button></div>',false);
+    '<button type="button" data-action="welcome-blank">'+icon('home',23)+'<b>Start blank</b><small>Set up your accounts and your own budget.</small></button><button type="button" id="atelier-welcome-login"><strong>Sign in or create account</strong><small>Open a shared workspace or sync across devices.</small></button></div>',false);
 }
 function actionClick(e){
   const link=e.target.closest('nav a');
@@ -1056,6 +1056,12 @@ file.addEventListener('change',async()=>{
 const cloudPanel=document.querySelector('#atelier-cloud-panel');
 const cloudLauncher=document.querySelector('#atelier-cloud-open');
 cloudLauncher.addEventListener('click',()=>cloudPanel.showModal());
+dialog.addEventListener('click', event=>{
+  if(!event.target.closest('#atelier-welcome-login'))return;
+  dialog.close();
+  cloudPanel.showModal();
+});
+
 document.querySelector('#atelier-cloud-close').addEventListener('click',()=>cloudPanel.close());
 cloudPanel.querySelector('[role=status]').textContent='Connecting to Firebase…';
 cloudPanel.querySelector('#atelier-auth').hidden=true;
